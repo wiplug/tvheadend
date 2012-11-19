@@ -765,7 +765,7 @@ htsp_method_getEvent(htsp_connection_t *htsp, htsmsg_t *in)
   
   if(htsmsg_get_u32(in, "eventId", &eventId))
     return htsp_error("Missing argument 'eventId'");
-  lang = htsmsg_get_str_or_default(in, "language", htsp->htsp_language);
+  lang = htsmsg_get_str(in, "language") ?: htsp->htsp_language;
 
   if((e = epg_broadcast_find_by_id(eventId, NULL)) == NULL)
     return htsp_error("Event does not exist");
@@ -799,7 +799,7 @@ htsp_method_getEvents(htsp_connection_t *htsp, htsmsg_t *in)
   maxTime
     = htsmsg_get_s64_or_default(in, "maxTime", 0);
   lang
-    = htsmsg_get_str_or_default(in, "language", htsp->htsp_language);
+    = htsmsg_get_str(in, "language") ?: htsp->htsp_language;
 
   /* Use event as starting point */
   if (e || ch) {
@@ -868,7 +868,7 @@ htsp_method_epgQuery(htsp_connection_t *htsp, htsmsg_t *in)
     genre.code = u32;
     eg         = &genre;
   }
-  lang = htsmsg_get_str_or_default(in, "language", htsp->htsp_language);
+  lang = htsmsg_get_str(in, "language") ?: htsp->htsp_language;
   full = htsmsg_get_u32_or_default(in, "full", 0);
 
   //do the query
@@ -1275,8 +1275,8 @@ htsp_method_open_path(htsp_connection_t *htsp, const char *path)
   htsmsg_add_u32(rep, "id", hf->hf_id);
 
   if(!fstat(hf->hf_fd, &st)) {
-    htsmsg_add_u64(rep, "size", st.st_size);
-    htsmsg_add_u64(rep, "mtime", st.st_mtime);
+    htsmsg_add_s64(rep, "size", st.st_size);
+    htsmsg_add_s64(rep, "mtime", st.st_mtime);
   }
 
   return rep;
@@ -1336,10 +1336,10 @@ static htsmsg_t *
 htsp_method_file_read(htsp_connection_t *htsp, htsmsg_t *in)
 {
   htsp_file_t *hf = file_find(htsp, in);
-  uint64_t off;
+  int64_t off;
   uint32_t size;
 
-  if(htsmsg_get_u64(in, "offset", &off))
+  if(htsmsg_get_s64(in, "offset", &off))
     return htsp_error("Missing field 'offset'");
 
   if(htsmsg_get_u32(in, "size", &size))
@@ -1411,8 +1411,8 @@ htsp_method_file_stat(htsp_connection_t *htsp, htsmsg_t *in)
 
   htsmsg_t *rep = htsmsg_create_map();
   if(!fstat(hf->hf_fd, &st)) {
-    htsmsg_add_u64(rep, "size", st.st_size);
-    htsmsg_add_u64(rep, "mtime", st.st_mtime);
+    htsmsg_add_s64(rep, "size", st.st_size);
+    htsmsg_add_s64(rep, "mtime", st.st_mtime);
   }
   return rep;
 }
