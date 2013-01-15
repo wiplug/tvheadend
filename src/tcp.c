@@ -35,11 +35,7 @@
 #include "tcp.h"
 #include "tvheadend.h"
 
-#if ENABLE_IPV6
-int tcp_preferred_address_family = AF_INET6;
-#else
 int tcp_preferred_address_family = AF_INET;
-#endif
 
 /**
  *
@@ -579,17 +575,13 @@ tcp_server_create(int port, tcp_server_callback_t *start, void *opaque)
  *
  */
 void
-tcp_server_init(int opt_ipfam)
+tcp_server_init(int enable_ipv6)
 {
   pthread_t tid;
 
-  if(opt_ipfam)
-  {
-#if ENABLE_IPV6
-    tcp_preferred_address_family = AF_INET;
-#else
+  if(enable_ipv6) {
     tcp_preferred_address_family = AF_INET6;
-#endif
+    tvhlog(LOG_INFO, "tcp", "enabling IPv6 support");
   }
 
   tcp_server_epoll_fd = epoll_create(10);

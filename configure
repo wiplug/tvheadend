@@ -28,7 +28,6 @@ OPTIONS=(
   "inotify:auto"
   "bundle:no"
   "dvbcsa:no"
-  "ipv6:yes"
 )
 
 #

@@ -23,7 +23,7 @@
 
 extern int tcp_preferred_address_family;
 
-void tcp_server_init(int opt_ipfam);
+void tcp_server_init(int enable_ipv6);
 
 int tcp_connect(const char *hostname, int port, char *errbuf,
 		size_t errbufsize, int timeout);
