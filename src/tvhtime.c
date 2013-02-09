@@ -6,9 +6,19 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 #include "tvhtime.h"
+#include "tvheadend.h"
+#include "settings.h"
 
+uint32_t tvhtime_update_enabled;
+uint32_t tvhtime_ntp_enabled;
+uint32_t tvhtime_tolerance;
+
+/*
+ * NTP processing
+ */
 #define NTPD_BASE	0x4e545030	/* "NTP0" */
 #define NTPD_UNIT	2
 
@@ -61,32 +71,90 @@ ntp_shm_init ( void )
   return shmptr;
 }
 
+/*
+ * Update time
+ */
 void
 tvhtime_update ( struct tm *tm )
 {
   time_t now;
   struct timeval tv;
   ntp_shm_t *ntp_shm;
+  int64_t t1, t2;
 
-  if (!(ntp_shm = ntp_shm_init()))
-    return;
-
+  /* Current and reported time */
   now = mktime(tm);
   gettimeofday(&tv, NULL);
 
-#if NTP_TRACE
-  int64_t t1, t2;
+  /* Delta */
   t1 = now * 1000000;
   t2 = tv.tv_sec * 1000000 + tv.tv_usec;
+#if NTP_TRACE
   tvhlog(LOG_DEBUG, "ntp", "delta = %"PRId64" us\n", t2 - t1);
 #endif
 
-  ntp_shm->valid = 0;
-  ntp_shm->count++;
-  ntp_shm->clockTimeStampSec    = now;
-  ntp_shm->clockTimeStampUSec   = 0;
-  ntp_shm->receiveTimeStampSec  = tv.tv_sec;
-  ntp_shm->receiveTimeStampUSec = (int)tv.tv_usec;
-  ntp_shm->count++;
-  ntp_shm->valid = 1;
+  /* Update local clock */
+  if (tvhtime_update_enabled)
+    if (llabs(t2 - t1) > tvhtime_tolerance)
+      stime(&now);
+
+  /* NTP */
+  if (tvhtime_ntp_enabled) {
+    if (!(ntp_shm = ntp_shm_init()))
+      return;
+
+    ntp_shm->valid = 0;
+    ntp_shm->count++;
+    ntp_shm->clockTimeStampSec    = now;
+    ntp_shm->clockTimeStampUSec   = 0;
+    ntp_shm->receiveTimeStampSec  = tv.tv_sec;
+    ntp_shm->receiveTimeStampUSec = (int)tv.tv_usec;
+    ntp_shm->count++;
+    ntp_shm->valid = 1;
+  }
+}
+
+/* Initialise */
+void tvhtime_init ( void )
+{
+  htsmsg_t *m = hts_settings_load("tvhtime/config");
+  if (htsmsg_get_u32(m, "update_enabled", &tvhtime_update_enabled))
+    tvhtime_update_enabled = 0;
+  if (htsmsg_get_u32(m, "ntp_enabled", &tvhtime_ntp_enabled))
+    tvhtime_ntp_enabled = 0;
+  if (htsmsg_get_u32(m, "tolerance", &tvhtime_tolerance))
+    tvhtime_tolerance = 5000;
+}
+
+static void tvhtime_save ( void )
+{
+  htsmsg_t *m = htsmsg_create_map();
+  htsmsg_add_u32(m, "update_enabled", tvhtime_update_enabled);
+  htsmsg_add_u32(m, "ntp_enabled", tvhtime_ntp_enabled);
+  htsmsg_add_u32(m, "tolerance", tvhtime_tolerance);
+  hts_settings_save(m, "tvhtime/config");
+}
+
+void tvhtime_set_update_enabled ( uint32_t on )
+{
+  if (tvhtime_update_enabled == on)
+    return;
+  tvhtime_update_enabled = on;
+  tvhtime_save();
+}
+
+void tvhtime_set_ntp_enabled ( uint32_t on )
+{
+  if (tvhtime_ntp_enabled == on)
+    return;
+  tvhtime_ntp_enabled = on;
+  tvhtime_save();
+}
+
+void tvhtime_set_tolerance ( uint32_t v )
+{
+  if (tvhtime_tolerance == v)
+    return;
+  tvhtime_tolerance = v;
+  tvhtime_save();
 }
