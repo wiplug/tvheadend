@@ -287,6 +287,7 @@ dvb_fe_stop(th_dvb_mux_instance_t *tdmi, int retune)
 
   dvb_adapter_stop(tda, TDA_OPT_DVR);
   dvb_table_flush_all(tdmi);
+  tda->tda_locked      = 0;
 
   assert(tdmi->tdmi_scan_queue == NULL);
 
@@ -412,8 +413,6 @@ dvb_fe_tune_s2(th_dvb_mux_instance_t *tdmi, dvb_mux_conf_t *dmc)
 int
 dvb_fe_tune(th_dvb_mux_instance_t *tdmi, const char *reason)
 {
-  int count;
-  fe_status_t status;
   th_dvb_adapter_t *tda = tdmi->tdmi_adapter;
 
   // copy dmc, cause frequency may be change with FE_QPSK
@@ -525,25 +524,14 @@ dvb_fe_tune(th_dvb_mux_instance_t *tdmi, const char *reason)
 
   tda->tda_mux_current = tdmi;
 
-  /* wait for lock - TODO: this needs doing properly (async) ! */
-  status = 0;
-  count  = 10 * (tda->tda_grace_period ?: 5);
-  while (count && !(status & FE_HAS_LOCK)) {
-    if(ioctl(tda->tda_fe_fd, FE_READ_STATUS, &status))
-      status = 0;
-    count--;
-    usleep(100000);
-  }
-  if (!(status & FE_HAS_LOCK))
-    return SM_CODE_TUNING_FAILED;
-  // NASTY NASTY SLEEP, do this properly!!
-
   dvb_adapter_start(tda, TDA_OPT_ALL);
 
   gtimer_arm(&tda->tda_fe_monitor_timer, dvb_fe_monitor, tda, 1);
 
+#if 0
   dvb_table_add_default(tdmi);
   epggrab_mux_start(tdmi);
+#endif
 
   dvb_adapter_notify(tda);
   return 0;

@@ -208,6 +208,8 @@ typedef struct th_dvb_adapter {
 
   uint32_t tda_enabled;
 
+  int tda_locked;
+
   const char *tda_rootpath;
   char *tda_identifier;
   uint32_t tda_autodiscovery;
