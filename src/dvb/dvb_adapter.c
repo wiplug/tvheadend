@@ -141,7 +141,7 @@ dvb_adapter_set_enabled(th_dvb_adapter_t *tda, int on)
     gtimer_disarm(&tda->tda_mux_scanner_timer);
     if (tda->tda_mux_current)
       dvb_fe_stop(tda->tda_mux_current, 0);
-    dvb_adapter_stop(tda);
+    dvb_adapter_stop(tda, TDA_OPT_ALL);
   } else {
     tda_init(tda);
   }
@@ -692,22 +692,26 @@ static void tda_init (th_dvb_adapter_t *tda)
  *
  */
 void
-dvb_adapter_start ( th_dvb_adapter_t *tda )
+dvb_adapter_start ( th_dvb_adapter_t *tda, int opt )
 {
   if(tda->tda_enabled == 0) {
     tvhlog(LOG_INFO, "dvb", "Adapter \"%s\" cannot be started - it's disabled", tda->tda_displayname);
     return;
   }
+  
+  /* Default to ALL */
+  if (!opt)
+    opt = TDA_OPT_ALL;
 
   /* Open front end */
-  if (tda->tda_fe_fd == -1) {
+  if ((opt & TDA_OPT_FE) && (tda->tda_fe_fd == -1)) {
     tda->tda_fe_fd = tvh_open(tda->tda_fe_path, O_RDWR | O_NONBLOCK, 0);
     if (tda->tda_fe_fd == -1) return;
     tvhlog(LOG_DEBUG, "dvb", "%s opened frontend %s", tda->tda_rootpath, tda->tda_fe_path);
   }
 
   /* Start DVR thread */
-  if (tda->tda_dvr_pipe.rd == -1) {
+  if ((opt & TDA_OPT_DVR) && (tda->tda_dvr_pipe.rd == -1)) {
     int err = tvh_pipe(O_NONBLOCK, &tda->tda_dvr_pipe);
     assert(err != -1);
     pthread_create(&tda->tda_dvr_thread, NULL, dvb_adapter_input_dvr, tda);
@@ -716,10 +720,14 @@ dvb_adapter_start ( th_dvb_adapter_t *tda )
 }
 
 void
-dvb_adapter_stop_dvr ( th_dvb_adapter_t *tda )
+dvb_adapter_stop ( th_dvb_adapter_t *tda, int opt )
 {
+  /* Poweroff */
+  if (opt & TDA_OPT_PWR)
+    dvb_adapter_poweroff(tda);
+
   /* Stop DVR thread */
-  if (tda->tda_dvr_pipe.rd != -1) {
+  if ((opt & TDA_OPT_DVR) && (tda->tda_dvr_pipe.rd != -1)) {
     tvhlog(LOG_DEBUG, "dvb", "%s stopping thread", tda->tda_rootpath);
     int err = tvh_write(tda->tda_dvr_pipe.wr, "", 1);
     assert(!err);
@@ -729,26 +737,17 @@ dvb_adapter_stop_dvr ( th_dvb_adapter_t *tda )
     tda->tda_dvr_pipe.rd = -1;
     tvhlog(LOG_DEBUG, "dvb", "%s stopped thread", tda->tda_rootpath);
   }
-}
 
-void
-dvb_adapter_stop ( th_dvb_adapter_t *tda )
-{
-  /* Poweroff */
-  dvb_adapter_poweroff(tda);
-
-  /* Don't stop/close */
+  /* Don't close FE */
   if (!tda->tda_idleclose && tda->tda_enabled) return;
 
   /* Close front end */
-  if (tda->tda_fe_fd != -1) {
+  if ((opt & TDA_OPT_FE) && (tda->tda_fe_fd != -1)) {
     tvhlog(LOG_DEBUG, "dvb", "%s closing frontend", tda->tda_rootpath);
     close(tda->tda_fe_fd);
     tda->tda_fe_fd = -1;
   }
 
-  dvb_adapter_stop_dvr(tda);
-  
   dvb_adapter_notify(tda);
 }
 
@@ -1022,7 +1021,7 @@ dvb_adapter_input_dvr(void *aux)
     dmx_param.pes_type = DMX_PES_OTHER;
     dmx_param.flags = DMX_IMMEDIATE_START;
   
-    if(ioctl(dmx, DMX_SET_PES_FILTER, &dmx_param)) {
+    if(ioctl(dmx, DMX_SET_PES_FILTER, &dmx_param) == -1) {
       tvhlog(LOG_ERR, "dvb",
 	     "Unable to configure demuxer \"%s\" for all PIDs -- %s",
 	     tda->tda_demux_path, strerror(errno));
