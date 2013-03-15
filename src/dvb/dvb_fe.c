@@ -273,6 +273,7 @@ void
 dvb_fe_stop(th_dvb_mux_instance_t *tdmi, int retune)
 {
   th_dvb_adapter_t *tda = tdmi->tdmi_adapter;
+  dvb_table_feed_t *dtf;
 
   lock_assert(&global_lock);
 
@@ -286,6 +287,10 @@ dvb_fe_stop(th_dvb_mux_instance_t *tdmi, int retune)
   }
 
   dvb_adapter_stop(tda, TDA_OPT_DVR);
+  pthread_mutex_lock(&tda->tda_delivery_mutex);
+  while((dtf = TAILQ_FIRST(&tda->tda_table_feed)))
+    TAILQ_REMOVE(&tda->tda_table_feed, dtf, dtf_link);
+  pthread_mutex_unlock(&tda->tda_delivery_mutex);
   dvb_table_flush_all(tdmi);
   tda->tda_locked      = 0;
 
